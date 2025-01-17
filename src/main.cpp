@@ -42,6 +42,9 @@ rotation RotationLB = rotation(PORT2, false);
 
 // Goal
 digital_out Goal = digital_out(Brain.ThreeWirePort.A);
+
+// Doinker
+digital_out Doinker = digital_out(Brain.ThreeWirePort.B);
   
 // Optical
 optical ColorSensor = optical(PORT15);
@@ -63,10 +66,10 @@ gps GPS = gps(PORT20, -152, 0, distanceUnits::mm, -90, turnType::right);
 /*---------------------------------------------------------------------------*/
 void vexcodeInit(void);
 
-void moveForward(double distanceWanted, double tolerance = 5.0) {
+void moveForward(double distanceWanted) {
   const double MAX_SPEED = 50;
   const double MIN_SPEED = 20;
-  const double fP = 0.3;
+  const double fP = 0.1;
   double error;
   double motorSpeed;
 
@@ -75,9 +78,10 @@ void moveForward(double distanceWanted, double tolerance = 5.0) {
   while (true) {
     double currentPosition = Rotation.position(degrees);
         
-    error = distanceWanted - currentPosition;
+    error = distanceWanted - currentPosition; // Calculate error for forward movement
 
-    if (fabs(error) <= tolerance) {
+    // Break if within 5 degrees of the desired position
+    if (fabs(error) <= 5.0) {
       break; 
     }
 
@@ -92,6 +96,7 @@ void moveForward(double distanceWanted, double tolerance = 5.0) {
 
     motorSpeed = fmin(fmax(motorSpeed, -MAX_SPEED), MAX_SPEED);
 
+    // Spin motors forward
     L1.spin(forward, motorSpeed, percent);
     L2.spin(forward, motorSpeed, percent);
     L3.spin(forward, motorSpeed, percent);
@@ -102,6 +107,57 @@ void moveForward(double distanceWanted, double tolerance = 5.0) {
     wait(20, msec);
   }
 
+  // Stop all motors
+  L1.stop(brake);
+  L2.stop(brake);
+  L3.stop(brake);
+  R1.stop(brake);
+  R2.stop(brake);
+  R3.stop(brake);
+}
+
+void moveBackward(double distanceWanted) {
+  double MAX_SPEED = 50;
+  double MIN_SPEED = 0;
+  double fP = 0.1;
+  double error;
+  double motorSpeed;
+
+  Rotation.resetPosition();
+
+  while (true) {
+    double currentPosition = Rotation.position(degrees);
+        
+    error = distanceWanted + currentPosition; // Invert the error for backward movement
+
+    // Break if within 5 degrees of the desired position
+    if (fabs(error) <= 5.0) {
+      break; 
+    }
+
+    motorSpeed = error * fP;
+
+    double distanceRemaining = fabs(error);
+    motorSpeed = fmax(MIN_SPEED, fmin(MAX_SPEED, motorSpeed));
+
+    if (distanceRemaining < 100) {
+      motorSpeed *= (distanceRemaining / 100);
+    }
+
+    motorSpeed = fmin(fmax(motorSpeed, -MAX_SPEED), MAX_SPEED);
+
+    // Spin motors in reverse direction
+    L1.spin(reverse, motorSpeed, percent);
+    L2.spin(reverse, motorSpeed, percent);
+    L3.spin(reverse, motorSpeed, percent);
+    R1.spin(reverse, motorSpeed, percent);
+    R2.spin(reverse, motorSpeed, percent);
+    R3.spin(reverse, motorSpeed, percent);
+
+    wait(20, msec);
+  }
+
+  // Stop all motors
   L1.stop(brake);
   L2.stop(brake);
   L3.stop(brake);
@@ -111,7 +167,7 @@ void moveForward(double distanceWanted, double tolerance = 5.0) {
 }
 
 void inertialTurn(double targetAngle) {
-  const double pValue = 0.5;
+  const double pValue = 2;
   const double maxSpeed = 50.0;
 
   Inertial.resetHeading();
@@ -165,7 +221,7 @@ void inertialTurn(double targetAngle) {
 
 const int position1 = 160; 
 const int position2 = 142;
-const int position3 = 20; 
+const int position3 = 10; 
 const int position4 = -40;
 int positionCounter = 0;
 
@@ -226,6 +282,8 @@ void LadyBrown() {
 
 void pre_auton(void) {
   Goal.set(false);
+  Rotation.resetPosition();
+  Inertial.resetHeading();
 }
 
 /*---------------------------------------------------------------------------*/
@@ -233,7 +291,7 @@ void pre_auton(void) {
 /*---------------------------------------------------------------------------*/
 
 void autonomous(void) {
-
+  inertialTurn(-90);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -241,18 +299,30 @@ void autonomous(void) {
 /*---------------------------------------------------------------------------*/
 
 // Goal
-bool airPress = false;
-int counter = 0;
-void down() {
-  if(counter == 0){
-    Goal.set(airPress);
-     airPress = !airPress;
+bool airPress1 = false;
+int counter1 = 0;
+void down1() {
+  if(counter1 == 0){
+    Goal.set(airPress1);
+     airPress1 = !airPress1;
   }
-  counter++;
+  counter1++;
+}
+
+// Doinker
+bool airPress2 = false;
+int counter2 = 0;
+void down2() {
+  if(counter2 == 0){
+    Doinker.set(airPress2);
+     airPress2 = !airPress2;
+  }
+  counter2++;
 }
 
 void usercontrol(void) {
   while (1) {
+    // Drivetrain
     L1.spin(forward, (Controller1.Axis3.position(percent) + Controller1.Axis1.position(percent) * TurnSpeed), percent);
     L2.spin(forward, (Controller1.Axis3.position(percent) + Controller1.Axis1.position(percent) * TurnSpeed), percent);
     L3.spin(forward, (Controller1.Axis3.position(percent) + Controller1.Axis1.position(percent) * TurnSpeed), percent);
@@ -272,8 +342,13 @@ void usercontrol(void) {
     }
 
     // Goal
-    Controller1.ButtonL1.pressed(down);
-    counter = 0;
+    Controller1.ButtonL1.pressed(down1);
+    counter1 = 0;
+
+    // Doinker
+    Controller1.ButtonA.pressed(down2);
+    counter2 = 0;
+    
 
     // Lady Brown
     if (Controller1.ButtonL2.pressing()) {
